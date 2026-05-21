@@ -13,3 +13,212 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum MenuCategoryType {
+  FOOD
+  DRINK
+  SNACK
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE // slot phase 2 (Midtrans)
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+model User {
+  id             Int      @id @default(autoincrement())
+  email          String   @unique @db.VarChar(255)
+  passwordHash   String   @db.VarChar(255)
+  name           String   @db.VarChar(100)
+  whatsappNumber String   @db.VarChar(20)
+  role           Role     @default(CUSTOMER)
+  isVerified     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  vendorProfile VendorProfile?
+  ordersAsCustomer Order[]  @relation("CustomerOrders")
+  ratings        Rating[]
+
+  @@map("users")
+}
+
+model VendorProfile {
+  id            Int     @id @default(autoincrement())
+  userId        Int     @unique
+  canteenNumber Int     @unique // 1–12, 1 kantin = 1 vendor
+  canteenName   String  @db.VarChar(100)
+  description   String? @db.Text
+  logoUrl       String? @db.VarChar(500)
+  isActive      Boolean @default(true)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menus   Menu[]
+  orders  Order[]  @relation("VendorOrders")
+  ratings Rating[]
+
+  @@map("vendor_profiles")
+}
+
+model MenuCategory {
+  id    Int              @id @default(autoincrement())
+  name  String           @db.VarChar(50)
+  type  MenuCategoryType
+
+  menus Menu[]
+
+  @@map("menu_categories")
+}
+
+model Menu {
+  id          Int     @id @default(autoincrement())
+  vendorId    Int
+  categoryId  Int
+  name        String  @db.VarChar(100)
+  description String? @db.Text
+  price       Decimal @db.Decimal(10, 2)
+  imageUrl    String? @db.VarChar(500)
+  stock       Int     @default(0)
+  isAvailable Boolean @default(true)
+
+  // Denormalized untuk performa — diupdate setiap ada rating baru
+  avgRating   Float @default(0)
+  ratingCount Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor     VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category   MenuCategory  @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  ratings    Rating[]
+
+  @@index([vendorId])
+  @@index([categoryId])
+  @@map("menus")
+}
+
+model Order {
+  id               Int           @id @default(autoincrement())
+  orderCode        String        @unique @db.VarChar(20) // format: KK-YYYYMMDD-XXX
+  customerId       Int
+  vendorId         Int
+  status           OrderStatus   @default(PENDING)
+  paymentMethod    PaymentMethod @default(CASH)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  paymentReference String?       @db.VarChar(255) // referensi Midtrans phase 2
+  subtotal         Decimal       @db.Decimal(10, 2)
+  notes            String?       @db.Text
+
+  // Timestamps per status-change
+  acceptedAt   DateTime?
+  readyAt      DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+
+  rejectionReason String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer   User          @relation("CustomerOrders", fields: [customerId], references: [id])
+  vendor     VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
+  orderItems OrderItem[]
+
+  // Index untuk dashboard query
+  @@index([vendorId, status])
+  @@index([customerId, status])
+  @@index([orderCode])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               Int     @id @default(autoincrement())
+  orderId          Int
+  menuId           Int
+  menuNameSnapshot String  @db.VarChar(100) // snapshot nama menu saat checkout
+  priceSnapshot    Decimal @db.Decimal(10, 2) // snapshot harga saat checkout
+  quantity         Int
+  subtotal         Decimal @db.Decimal(10, 2)
+
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menu   Menu   @relation(fields: [menuId], references: [id])
+  rating Rating?
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Rating {
+  id          Int     @id @default(autoincrement())
+  orderItemId Int     @unique // 1 line item = max 1 rating
+  customerId  Int
+  menuId      Int
+  vendorId    Int     // denormalized untuk query "semua rating vendor ini"
+  stars       Int     // 1–5, validasi di DTO bukan DB
+  review      String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  customer      User          @relation(fields: [customerId], references: [id])
+  menu          Menu          @relation(fields: [menuId], references: [id])
+  vendorProfile VendorProfile @relation(fields: [vendorId], references: [id])
+
+  @@index([menuId])
+  @@index([vendorId])
+  @@map("ratings")
+}
+
+model OtpToken {
+  id          Int       @id @default(autoincrement())
+  email       String    @db.VarChar(255)
+  codeHash    String    @db.VarChar(255)
+  purpose     String    @default("REGISTER") @db.VarChar(50)
+  expiresAt   DateTime
+  consumedAt  DateTime? // null = belum dipakai
+  createdAt   DateTime  @default(now())
+
+  // Index untuk rate-limit query (ambil token per email dalam window waktu)
+  @@index([email, createdAt])
+  @@map("otp_tokens")
+}
+
+model OtpRateLimit {
+  id               Int      @id @default(autoincrement())
+  email            String   @unique @db.VarChar(255)
+  requestsInWindow Int      @default(0)
+  windowStartAt    DateTime
+  lastRequestAt    DateTime
+
+  @@map("otp_rate_limits")
+}
