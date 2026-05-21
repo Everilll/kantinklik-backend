@@ -44,20 +44,20 @@ async function main() {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await prisma.user.upsert({
-      where: { email },
-      update: { passwordHash, name }, // update password kalau sudah ada
-      create: {
-        email,
-        passwordHash,
-        name,
-        whatsappNumber: '000000000000', // placeholder, admin tidak butuh WA
-        role: Role.ADMIN,
-        isVerified: true,
-      },
-    });
+    // await prisma.user.upsert({
+    //   where: { email },
+    //   update: { passwordHash, name }, // update password kalau sudah ada
+    //   create: {
+    //     email,
+    //     passwordHash,
+    //     name,
+    //     whatsappNumber: '000000000000', // placeholder, admin tidak butuh WA
+    //     role: Role.ADMIN,
+    //     isVerified: true,
+    //   },
+    // });
 
-    console.log(`✅ Admin seeded: ${email}`);
+    // console.log(`✅ Admin seeded: ${email}`);
   }
 
   console.log('🎉 Seeding selesai!');
