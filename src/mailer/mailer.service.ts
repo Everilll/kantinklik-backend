@@ -24,13 +24,18 @@ export class MailerService {
     }
 
     try {
-      await this.resend.emails.send({
+      const response = await this.resend.emails.send({
         from: this.fromEmail,
         to,
         subject: 'Kode OTP KantinKlik',
         html: otpEmailTemplate(name, code, ttlMinutes),
       });
-      this.logger.log(`OTP email terkirim ke ${to}`);
+      
+      if (response.error) {
+        this.logger.error(`Resend API Error: ${response.error.message}`, response.error);
+      } else {
+        this.logger.log(`OTP email terkirim ke ${to}`);
+      }
     } catch (error) {
       // Log error tapi tidak throw — supaya flow register tidak berhenti total
       // kalau Resend down. Customer bisa pakai resend-otp endpoint
