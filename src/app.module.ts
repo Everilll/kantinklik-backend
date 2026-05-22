@@ -4,6 +4,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from './config/config.module';
+import { AuthModule } from './auth/auth.module';
+import { OtpModule } from './otp/otp.module';
+import { MailerModule } from './mailer/mailer.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule,
@@ -12,7 +15,10 @@ import { ConfigModule } from './config/config.module';
         ttl: 60000,
         limit: 100,
       },
-    ]),],
+    ]),
+    AuthModule,
+    OtpModule,
+    MailerModule,],
   controllers: [AppController],
   providers: [AppService],
 })

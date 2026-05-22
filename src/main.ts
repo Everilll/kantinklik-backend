@@ -9,7 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // ─── Global prefix ───────────────────────────────────────
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api');
 
   // ─── CORS ────────────────────────────────────────────────
   app.enableCors({
@@ -58,8 +58,8 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`🚀 App running on http://localhost:${port}`);
-  console.log(`📖 Swagger docs: http://localhost:${port}/api/docs`);
+  console.log(`App running on => http://localhost:${port}`);
+  console.log(`Swagger docs: http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
