@@ -9,7 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
 import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt';
+import { HashingService } from '../common/hashing/hashing.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private otpService: OtpService,
+    private hashingService: HashingService,
   ) {}
 
   // ─── Register Customer ───────────────────────────────────
@@ -42,7 +43,7 @@ export class AuthService {
       };
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await this.hashingService.hash(dto.password);
 
     const user = await this.prisma.user.create({
       data: {
@@ -110,7 +111,7 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Email atau password salah');
 
-    const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    const passwordMatch = await this.hashingService.compare(dto.password, user.passwordHash);
     if (!passwordMatch) throw new UnauthorizedException('Email atau password salah');
 
     if (!user.isVerified) {

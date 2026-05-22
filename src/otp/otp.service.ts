@@ -5,7 +5,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
-import * as bcrypt from 'bcrypt';
+import { HashingService } from '../common/hashing/hashing.service';
 import { OTP_LENGTH } from './otp.constants';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class OtpService {
     private prisma: PrismaService,
     private mailer: MailerService,
     private config: ConfigService,
+    private hashingService: HashingService,
   ) {
     this.ttlMinutes = this.config.get<number>('OTP_TTL_MINUTES') ?? 5;
     this.cooldownSeconds = this.config.get<number>('OTP_COOLDOWN_SECONDS') ?? 60;
@@ -29,7 +30,7 @@ export class OtpService {
     await this.checkRateLimit(email);
 
     const code = this.generateCode();
-    const codeHash = await bcrypt.hash(code, 10);
+    const codeHash = await this.hashingService.hash(code);
     const expiresAt = new Date(Date.now() + this.ttlMinutes * 60 * 1000);
 
     await this.prisma.otpToken.create({
@@ -59,7 +60,7 @@ export class OtpService {
       throw new BadRequestException('Kode OTP tidak valid atau sudah expired');
     }
 
-    const isMatch = await bcrypt.compare(code, token.codeHash);
+    const isMatch = await this.hashingService.compare(code, token.codeHash);
     if (!isMatch) {
       throw new BadRequestException('Kode OTP salah');
     }

@@ -7,6 +7,7 @@ import { ConfigModule } from './config/config.module';
 import { AuthModule } from './auth/auth.module';
 import { OtpModule } from './otp/otp.module';
 import { MailerModule } from './mailer/mailer.module';
+import { HashingModule } from './common/hashing/hashing.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule,
@@ -16,6 +17,7 @@ import { MailerModule } from './mailer/mailer.module';
         limit: 100,
       },
     ]),
+    HashingModule,
     AuthModule,
     OtpModule,
     MailerModule,],
