@@ -1,0 +1,40 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Resend } from 'resend';
+import { otpEmailTemplate } from './templates/otp-email';
+
+@Injectable()
+export class MailerService {
+  private readonly logger = new Logger(MailerService.name);
+  private readonly resend: Resend;
+  private readonly fromEmail: string;
+  private readonly isDev: boolean;
+
+  constructor(private config: ConfigService) {
+    this.resend = new Resend(this.config.get<string>('RESEND_API_KEY'));
+    this.fromEmail = this.config.get<string>('RESEND_FROM_EMAIL')!;
+    this.isDev = this.config.get<string>('NODE_ENV') !== 'production';
+  }
+
+  async sendOtp(to: string, name: string, code: string, ttlMinutes: number): Promise<void> {
+    // Dev mode: cukup log ke console, tidak perlu kirim email beneran
+    if (this.isDev) {
+      this.logger.log(`[DEV MODE] OTP untuk ${to}: ${code}`);
+      return;
+    }
+
+    try {
+      await this.resend.emails.send({
+        from: this.fromEmail,
+        to,
+        subject: 'Kode OTP KantinKlik',
+        html: otpEmailTemplate(name, code, ttlMinutes),
+      });
+      this.logger.log(`OTP email terkirim ke ${to}`);
+    } catch (error) {
+      // Log error tapi tidak throw — supaya flow register tidak berhenti total
+      // kalau Resend down. Customer bisa pakai resend-otp endpoint
+      this.logger.error(`Gagal kirim OTP ke ${to}:`, error);
+    }
+  }
+}
