@@ -1,16 +1,14 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ============================================================
+// KantinKlik — prisma/schema.prisma
+// Stack: Prisma 6 + PostgreSQL
+// ============================================================
 
 generator client {
   provider = "prisma-client-js"
-  // output   = "../generated/prisma"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -41,7 +39,7 @@ enum OrderStatus {
 
 enum PaymentMethod {
   CASH
-  ONLINE // slot phase 2 (Midtrans)
+  ONLINE
 }
 
 enum PaymentStatus {
@@ -56,18 +54,18 @@ enum PaymentStatus {
 
 model User {
   id             Int      @id @default(autoincrement())
-  email          String   @unique @db.VarChar(255)
-  passwordHash   String   @db.VarChar(255)
-  name           String   @db.VarChar(100)
-  whatsappNumber String   @db.VarChar(20)
+  email          String   @unique
+  passwordHash   String
+  name           String
+  whatsappNumber String
   role           Role     @default(CUSTOMER)
   isVerified     Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  vendorProfile VendorProfile?
-  ordersAsCustomer Order[]  @relation("CustomerOrders")
-  ratings        Rating[]
+  vendorProfile    VendorProfile?
+  ordersAsCustomer Order[]        @relation("CustomerOrders")
+  ratings          Rating[]
 
   @@map("users")
 }
@@ -75,10 +73,10 @@ model User {
 model VendorProfile {
   id            Int     @id @default(autoincrement())
   userId        Int     @unique
-  canteenNumber Int     @unique // 1–12, 1 kantin = 1 vendor
-  canteenName   String  @db.VarChar(100)
-  description   String? @db.Text
-  logoUrl       String? @db.VarChar(500)
+  canteenNumber Int     @unique
+  canteenName   String
+  description   String?
+  logoUrl       String?
   isActive      Boolean @default(true)
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -91,7 +89,7 @@ model VendorProfile {
 
 model MenuCategory {
   id    Int              @id @default(autoincrement())
-  name  String           @db.VarChar(50)
+  name  String           @unique
   type  MenuCategoryType
 
   menus Menu[]
@@ -100,22 +98,19 @@ model MenuCategory {
 }
 
 model Menu {
-  id          Int     @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   vendorId    Int
   categoryId  Int
-  name        String  @db.VarChar(100)
-  description String? @db.Text
-  price       Decimal @db.Decimal(10, 2)
-  imageUrl    String? @db.VarChar(500)
-  stock       Int     @default(0)
-  isAvailable Boolean @default(true)
-
-  // Denormalized untuk performa — diupdate setiap ada rating baru
-  avgRating   Float @default(0)
-  ratingCount Int   @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+  stock       Int      @default(0)
+  isAvailable Boolean  @default(true)
+  avgRating   Float    @default(0)
+  ratingCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   vendor     VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   category   MenuCategory  @relation(fields: [categoryId], references: [id])
@@ -129,32 +124,27 @@ model Menu {
 
 model Order {
   id               Int           @id @default(autoincrement())
-  orderCode        String        @unique @db.VarChar(20) // format: KK-YYYYMMDD-XXX
+  orderCode        String        @unique
   customerId       Int
   vendorId         Int
   status           OrderStatus   @default(PENDING)
   paymentMethod    PaymentMethod @default(CASH)
   paymentStatus    PaymentStatus @default(UNPAID)
-  paymentReference String?       @db.VarChar(255) // referensi Midtrans phase 2
+  paymentReference String?
   subtotal         Decimal       @db.Decimal(10, 2)
-  notes            String?       @db.Text
-
-  // Timestamps per status-change
-  acceptedAt   DateTime?
-  readyAt      DateTime?
-  completedAt  DateTime?
-  cancelledAt  DateTime?
-
-  rejectionReason String? @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notes            String?
+  acceptedAt       DateTime?
+  readyAt          DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  rejectionReason  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   customer   User          @relation("CustomerOrders", fields: [customerId], references: [id])
   vendor     VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   orderItems OrderItem[]
 
-  // Index untuk dashboard query
   @@index([vendorId, status])
   @@index([customerId, status])
   @@index([orderCode])
@@ -165,13 +155,13 @@ model OrderItem {
   id               Int     @id @default(autoincrement())
   orderId          Int
   menuId           Int
-  menuNameSnapshot String  @db.VarChar(100) // snapshot nama menu saat checkout
-  priceSnapshot    Decimal @db.Decimal(10, 2) // snapshot harga saat checkout
+  menuNameSnapshot String
+  priceSnapshot    Decimal @db.Decimal(10, 2)
   quantity         Int
   subtotal         Decimal @db.Decimal(10, 2)
 
-  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menu   Menu   @relation(fields: [menuId], references: [id])
+  order  Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menu   Menu    @relation(fields: [menuId], references: [id])
   rating Rating?
 
   @@index([orderId])
@@ -179,15 +169,14 @@ model OrderItem {
 }
 
 model Rating {
-  id          Int     @id @default(autoincrement())
-  orderItemId Int     @unique // 1 line item = max 1 rating
+  id          Int      @id @default(autoincrement())
+  orderItemId Int      @unique
   customerId  Int
   menuId      Int
-  vendorId    Int     // denormalized untuk query "semua rating vendor ini"
-  stars       Int     // 1–5, validasi di DTO bukan DB
-  review      String? @db.Text
-
-  createdAt DateTime @default(now())
+  vendorId    Int
+  stars       Int
+  review      String?
+  createdAt   DateTime @default(now())
 
   orderItem     OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   customer      User          @relation(fields: [customerId], references: [id])
@@ -200,22 +189,21 @@ model Rating {
 }
 
 model OtpToken {
-  id          Int       @id @default(autoincrement())
-  email       String    @db.VarChar(255)
-  codeHash    String    @db.VarChar(255)
-  purpose     String    @default("REGISTER") @db.VarChar(50)
-  expiresAt   DateTime
-  consumedAt  DateTime? // null = belum dipakai
-  createdAt   DateTime  @default(now())
+  id         Int       @id @default(autoincrement())
+  email      String
+  codeHash   String
+  purpose    String    @default("REGISTER")
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
 
-  // Index untuk rate-limit query (ambil token per email dalam window waktu)
   @@index([email, createdAt])
   @@map("otp_tokens")
 }
 
 model OtpRateLimit {
   id               Int      @id @default(autoincrement())
-  email            String   @unique @db.VarChar(255)
+  email            String   @unique
   requestsInWindow Int      @default(0)
   windowStartAt    DateTime
   lastRequestAt    DateTime
