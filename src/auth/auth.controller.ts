@@ -21,7 +21,7 @@ export class AuthController {
 
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verifikasi OTP — aktivasi akun + dapat token' })
+  @ApiOperation({ summary: 'Verifikasi OTP - aktivasi akun + dapat token' })
   @ApiResponse({ status: 200, description: 'Akun terverifikasi, return JWT' })
   @ApiResponse({ status: 400, description: 'OTP salah atau expired' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
@@ -39,7 +39,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login — berlaku untuk customer, vendor, dan admin' })
+  @ApiOperation({ summary: 'Login - berlaku untuk customer, vendor, dan admin' })
   @ApiResponse({ status: 200, description: 'Login berhasil, return JWT' })
   @ApiResponse({ status: 401, description: 'Email atau password salah' })
   login(@Body() dto: LoginDto) {

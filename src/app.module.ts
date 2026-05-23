@@ -8,6 +8,10 @@ import { AuthModule } from './auth/auth.module';
 import { OtpModule } from './otp/otp.module';
 import { MailerModule } from './mailer/mailer.module';
 import { HashingModule } from './common/hashing/hashing.module';
+import { UploadModule } from './upload/upload.module';
+import { AdminModule } from './admin/admin.module';
+import { VendorModule } from './vendor/vendor.module';
+import { MenuModule } from './menu/menu.module';
 
 @Module({
   imports: [PrismaModule, ConfigModule,
@@ -20,7 +24,11 @@ import { HashingModule } from './common/hashing/hashing.module';
     HashingModule,
     AuthModule,
     OtpModule,
-    MailerModule,],
+    MailerModule,
+    UploadModule,
+    AdminModule,
+    VendorModule,
+    MenuModule,],
   controllers: [AppController],
   providers: [AppService],
 })
