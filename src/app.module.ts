@@ -14,6 +14,8 @@ import { VendorModule } from './vendor/vendor.module';
 import { MenuModule } from './menu/menu.module';
 import { OrderModule } from './order/order.module';
 import { PaymentModule } from './payment/payment.module';
+import { RatingModule } from './rating/rating.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -34,7 +36,9 @@ import { PaymentModule } from './payment/payment.module';
     VendorModule,
     MenuModule,
     OrderModule,
-    PaymentModule,],
+    PaymentModule,
+    RatingModule,
+    UserModule,],
   controllers: [AppController],
   providers: [AppService],
 })
