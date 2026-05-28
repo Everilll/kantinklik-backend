@@ -42,7 +42,7 @@ export class AdminController {
   // ─── Vendor ──────────────────────────────────────────────
 
   @Get('vendors')
-  @ApiOperation({ summary: 'List semua vendor' })
+  @ApiOperation({ summary: '[ADMIN] List semua vendor' })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -56,13 +56,13 @@ export class AdminController {
   }
 
   @Post('vendors')
-  @ApiOperation({ summary: 'Buat akun vendor baru' })
+  @ApiOperation({ summary: '[ADMIN] Buat akun vendor baru' })
   createVendor(@Body() dto: CreateVendorDto) {
     return this.adminService.createVendor(dto);
   }
 
   @Patch('vendors/:id')
-  @ApiOperation({ summary: 'Update data vendor' })
+  @ApiOperation({ summary: '[ADMIN] Update data vendor' })
   updateVendor(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateVendorDto,
@@ -71,13 +71,13 @@ export class AdminController {
   }
 
   @Delete('vendors/:id')
-  @ApiOperation({ summary: 'Nonaktifkan vendor (soft delete)' })
+  @ApiOperation({ summary: '[ADMIN] Nonaktifkan vendor (soft delete)' })
   deactivateVendor(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.deactivateVendor(id);
   }
 
   @Post('vendors/:id/logo')
-  @ApiOperation({ summary: 'Upload logo vendor' })
+  @ApiOperation({ summary: '[ADMIN] Upload logo vendor' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -96,7 +96,7 @@ export class AdminController {
   // ─── Customer ────────────────────────────────────────────
 
   @Get('customers')
-  @ApiOperation({ summary: 'List semua customer' })
+  @ApiOperation({ summary: '[ADMIN] List semua customer' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -108,13 +108,13 @@ export class AdminController {
   }
 
   @Get('customers/:id')
-  @ApiOperation({ summary: 'Detail customer' })
+  @ApiOperation({ summary: '[ADMIN] Detail customer' })
   getCustomer(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.getCustomer(id);
   }
 
   @Patch('customers/:id/verify')
-  @ApiOperation({ summary: 'Toggle verifikasi customer (manual override)' })
+  @ApiOperation({ summary: '[ADMIN] Toggle verifikasi customer (manual override)' })
   toggleVerify(
     @Param('id', ParseIntPipe) id: number,
     @Body('isVerified') isVerified: boolean,

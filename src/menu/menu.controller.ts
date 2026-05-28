@@ -50,7 +50,7 @@ export class MenuController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'List semua menu milik vendor' })
+  @ApiOperation({ summary: '[VENDOR] List semua menu milik vendor' })
   listOwnMenus(
     @CurrentUser() user: { id: number },
     @Query() pagination: PaginationDto,
@@ -62,7 +62,7 @@ export class MenuController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Tambah menu baru' })
+  @ApiOperation({ summary: '[VENDOR] Tambah menu baru' })
   createMenu(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateMenuDto,
@@ -74,7 +74,7 @@ export class MenuController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Update menu (harga, stok, ketersediaan)' })
+  @ApiOperation({ summary: '[VENDOR] Update menu (harga, stok, ketersediaan)' })
   updateMenu(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) menuId: number,
@@ -87,7 +87,7 @@ export class MenuController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Hapus menu (soft delete)' })
+  @ApiOperation({ summary: '[VENDOR] Hapus menu (soft delete)' })
   deleteMenu(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) menuId: number,
@@ -99,7 +99,7 @@ export class MenuController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Upload gambar menu' })
+  @ApiOperation({ summary: '[VENDOR] Upload gambar menu' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

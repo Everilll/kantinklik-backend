@@ -83,7 +83,7 @@ export class VendorController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Lihat profil vendor sendiri' })
+  @ApiOperation({ summary: '[VENDOR] Lihat profil vendor sendiri' })
   getSelfProfile(@CurrentUser() user: { id: number }) {
     return this.vendorService.getSelfProfile(user.id);
   }
@@ -92,7 +92,7 @@ export class VendorController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Update profil vendor sendiri' })
+  @ApiOperation({ summary: '[VENDOR] Update profil vendor sendiri' })
   updateSelfProfile(
     @CurrentUser() user: { id: number },
     @Body() dto: { canteenName?: string; description?: string },
@@ -104,7 +104,7 @@ export class VendorController {
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
-  @ApiOperation({ summary: 'Upload logo vendor sendiri' })
+  @ApiOperation({ summary: '[VENDOR] Upload logo vendor sendiri' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
