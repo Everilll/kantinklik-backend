@@ -26,6 +26,11 @@ export const envValidationSchema = Joi.object({
   CLOUDINARY_API_KEY: Joi.string().required(),
   CLOUDINARY_API_SECRET: Joi.string().required(),
 
+  // ─── Xendit (QRIS) ─────────────────────────────────────────
+  XENDIT_SECRET_KEY: Joi.string().required(),
+  XENDIT_WEBHOOK_SECRET: Joi.string().required(),
+  QRIS_SERVICE_FEE_PERCENT: Joi.number().default(5),
+
   // ─── OTP config ───────────────────────────────────────────
   OTP_TTL_MINUTES: Joi.number().default(5),
   OTP_COOLDOWN_SECONDS: Joi.number().default(60),
