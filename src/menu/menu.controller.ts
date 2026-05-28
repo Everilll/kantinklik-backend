@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -28,18 +29,19 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ImageFilePipe } from '../upload/pipes/image-file.pipe';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Menus')
 @Controller()
 export class MenuController {
-  constructor(private menusService: MenuService) {}
+  constructor(private menuService: MenuService) {}
 
   // ─── Public ──────────────────────────────────────────────
 
   @Get('menu-categories')
   @ApiOperation({ summary: 'List kategori menu (untuk dropdown)' })
   getCategories() {
-    return this.menusService.getCategories();
+    return this.menuService.getCategories();
   }
 
   // ─── Vendor ──────────────────────────────────────────────
@@ -49,8 +51,11 @@ export class MenuController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.VENDOR)
   @ApiOperation({ summary: 'List semua menu milik vendor' })
-  listOwnMenus(@CurrentUser() user: { id: number }) {
-    return this.menusService.listOwnMenus(user.id);
+  listOwnMenus(
+    @CurrentUser() user: { id: number },
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.menuService.listOwnMenus(user.id, pagination);
   }
 
   @Post('vendor/menus')
@@ -62,7 +67,7 @@ export class MenuController {
     @CurrentUser() user: { id: number },
     @Body() dto: CreateMenuDto,
   ) {
-    return this.menusService.createMenu(user.id, dto);
+    return this.menuService.createMenu(user.id, dto);
   }
 
   @Patch('vendor/menus/:id')
@@ -75,7 +80,7 @@ export class MenuController {
     @Param('id', ParseIntPipe) menuId: number,
     @Body() dto: UpdateMenuDto,
   ) {
-    return this.menusService.updateMenu(user.id, menuId, dto);
+    return this.menuService.updateMenu(user.id, menuId, dto);
   }
 
   @Delete('vendor/menus/:id')
@@ -87,7 +92,7 @@ export class MenuController {
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) menuId: number,
   ) {
-    return this.menusService.deleteMenu(user.id, menuId);
+    return this.menuService.deleteMenu(user.id, menuId);
   }
 
   @Post('vendor/menus/:id/image')
@@ -108,6 +113,6 @@ export class MenuController {
     @Param('id', ParseIntPipe) menuId: number,
     @UploadedFile(new ImageFilePipe()) file: Express.Multer.File,
   ) {
-    return this.menusService.uploadMenuImage(user.id, menuId, file);
+    return this.menuService.uploadMenuImage(user.id, menuId, file);
   }
 }

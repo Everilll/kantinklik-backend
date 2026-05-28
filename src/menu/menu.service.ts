@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { paginate } from '../common/helpers/paginate.helper';
 
 @Injectable()
 export class MenuService {
@@ -15,7 +17,6 @@ export class MenuService {
     private upload: UploadService,
   ) {}
 
-  // ─── Ambil vendorProfile dari userId ─────────────────────
   private async getVendorProfile(userId: number) {
     const profile = await this.prisma.vendorProfile.findUnique({
       where: { userId },
@@ -27,20 +28,29 @@ export class MenuService {
   // ─── Public ──────────────────────────────────────────────
 
   async getCategories() {
-    return this.prisma.menuCategory.findMany({
-      orderBy: { name: 'asc' },
-    });
+    return this.prisma.menuCategory.findMany({ orderBy: { name: 'asc' } });
   }
 
   // ─── Vendor CRUD ─────────────────────────────────────────
 
-  async listOwnMenus(userId: number) {
+  async listOwnMenus(userId: number, pagination: PaginationDto) {
     const profile = await this.getVendorProfile(userId);
-    return this.prisma.menu.findMany({
-      where: { vendorId: profile.id },
-      include: { category: { select: { id: true, name: true, type: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { skip, page, limit } = pagination;
+
+    const where = { vendorId: profile.id };
+
+    const [menus, total] = await this.prisma.$transaction([
+      this.prisma.menu.findMany({
+        where,
+        include: { category: { select: { id: true, name: true, type: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.menu.count({ where }),
+    ]);
+
+    return paginate(menus, total, page!, limit!);
   }
 
   async createMenu(userId: number, dto: CreateMenuDto) {
@@ -81,7 +91,6 @@ export class MenuService {
   async deleteMenu(userId: number, menuId: number) {
     await this.checkOwnership(userId, menuId);
 
-    // Soft delete — set isAvailable false supaya histori order tidak rusak
     await this.prisma.menu.update({
       where: { id: menuId },
       data: { isAvailable: false, stock: 0 },
@@ -106,17 +115,13 @@ export class MenuService {
     return { message: 'Gambar menu berhasil diupload', data: { imageUrl } };
   }
 
-  // ─── Helper: cek ownership menu ──────────────────────────
   private async checkOwnership(userId: number, menuId: number) {
     const profile = await this.getVendorProfile(userId);
-
     const menu = await this.prisma.menu.findUnique({ where: { id: menuId } });
     if (!menu) throw new NotFoundException('Menu tidak ditemukan');
-
     if (menu.vendorId !== profile.id) {
       throw new ForbiddenException('Kamu tidak punya akses ke menu ini');
     }
-
     return menu;
   }
 }
