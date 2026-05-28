@@ -48,6 +48,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum SettlementMode {
+  MANUAL
+  AUTO
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -71,13 +76,17 @@ model User {
 }
 
 model VendorProfile {
-  id            Int     @id @default(autoincrement())
-  userId        Int     @unique
-  canteenNumber Int     @unique
-  canteenName   String
-  description   String?
-  logoUrl       String?
-  isActive      Boolean @default(true)
+  id                Int            @id @default(autoincrement())
+  userId            Int            @unique
+  canteenNumber     Int            @unique
+  canteenName       String
+  description       String?
+  logoUrl           String?
+  isActive          Boolean        @default(true)
+  settlementMode    SettlementMode @default(MANUAL)
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountName   String?
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   menus   Menu[]
@@ -88,9 +97,9 @@ model VendorProfile {
 }
 
 model MenuCategory {
-  id    Int              @id @default(autoincrement())
-  name  String           @unique
-  type  MenuCategoryType
+  id   Int              @id @default(autoincrement())
+  name String           @unique
+  type MenuCategoryType
 
   menus Menu[]
 
@@ -137,9 +146,14 @@ model Order {
   readyAt          DateTime?
   completedAt      DateTime?
   cancelledAt      DateTime?
+  paidAt           DateTime?
   rejectionReason  String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  serviceFeeRate   Decimal       @default(0) @db.Decimal(5, 4)
+  serviceFee       Decimal       @default(0) @db.Decimal(10, 2)
+  platformFee      Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal       @db.Decimal(10, 2)
 
   customer   User          @relation("CustomerOrders", fields: [customerId], references: [id])
   vendor     VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
