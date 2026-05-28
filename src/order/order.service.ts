@@ -13,6 +13,7 @@ import { generateOrderCode } from './order-code.generator';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { paginate } from '../common/helpers/paginate.helper';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class OrderService {
@@ -21,7 +22,8 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private paymentService: PaymentService,
-  ) {}
+    private config: ConfigService
+  ) { }
 
   // ─── Customer: Checkout ──────────────────────────────────
   async checkout(customerId: number, dto: CheckoutOrderDto) {
@@ -70,16 +72,33 @@ export class OrderService {
             }
           }
 
-          // 6. Hitung subtotal
+          // 6. Hitung fee dan total
           const subtotal = dto.items.reduce((sum, item) => {
             const menu = menus.find((m) => m.id === item.menuId)!;
             return sum + Number(menu.price) * item.quantity;
           }, 0);
 
-          // 7. Generate order code (race-safe via unique constraint + retry)
+          // Fee hanya untuk ONLINE — customer yang menanggung
+          const feePercent = this.config.get<number>('QRIS_SERVICE_FEE_PERCENT') ?? 5;
+          const serviceFeeRate =
+            dto.paymentMethod === 'ONLINE'
+              ? new Prisma.Decimal(feePercent / 100)
+              : new Prisma.Decimal(0);
+          const platformFee =
+            dto.paymentMethod === 'ONLINE'
+              ? parseFloat((subtotal * (feePercent / 100)).toFixed(2))
+              : 0;
+          // Estimasi biaya Xendit ~0.7% — hanya untuk rekonsiliasi internal
+          const serviceFee =
+            dto.paymentMethod === 'ONLINE'
+              ? parseFloat((subtotal * 0.007).toFixed(2))
+              : 0;
+          const totalAmount = parseFloat((subtotal + platformFee).toFixed(2));
+
+          // 7. Generate order code
           const orderCode = await generateOrderCode(tx);
 
-          // 8. Buat Order
+          // 8. Buat Order (dengan fee fields)
           const order = await tx.order.create({
             data: {
               orderCode,
@@ -88,6 +107,10 @@ export class OrderService {
               subtotal,
               notes: dto.notes,
               paymentMethod: dto.paymentMethod,
+              serviceFeeRate,
+              platformFee,
+              serviceFee,
+              totalAmount,
               orderItems: {
                 create: dto.items.map((item) => {
                   const menu = menus.find((m) => m.id === item.menuId)!;
@@ -112,7 +135,7 @@ export class OrderService {
             });
           }
 
-          // 10. Initiate payment
+          // 10. Initiate payment — pakai totalAmount (sudah include fee untuk ONLINE)
           const customer = await tx.user.findUnique({
             where: { id: customerId },
             select: { email: true },
@@ -123,7 +146,7 @@ export class OrderService {
             {
               id: order.id,
               orderCode: order.orderCode,
-              totalAmount: subtotal,
+              totalAmount,             // customer bayar ini
               customerEmail: customer!.email,
             },
           );
@@ -143,13 +166,15 @@ export class OrderService {
               orderId: order.id,
               orderCode: order.orderCode,
               subtotal,
+              platformFee,
+              totalAmount,
               paymentMethod: dto.paymentMethod,
               paymentStatus: paymentResult.paymentStatus,
               ...(paymentResult.qrCodeUrl && {
                 qrCodeUrl: paymentResult.qrCodeUrl,
               }),
             },
-          };
+          }
         });
       } catch (error) {
         // Retry hanya untuk race condition order code (P2002 on orderCode)
@@ -303,16 +328,22 @@ export class OrderService {
 
   // ─── Vendor: Accept ──────────────────────────────────────
   async acceptOrder(userId: number, orderId: number) {
-    const order = await this.getVendorOwnedOrder(userId, orderId);
-    this.assertStatus(order.status, OrderStatus.PENDING, 'accept');
+  const order = await this.getVendorOwnedOrder(userId, orderId);
+  this.assertStatus(order.status, OrderStatus.PENDING, 'accept');
 
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: OrderStatus.ACCEPTED, acceptedAt: new Date() },
-    });
-
-    return { message: 'Order diterima' };
+  if (order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID') {
+    throw new BadRequestException(
+      'Order ONLINE belum dibayar — tidak bisa diterima sebelum pembayaran terkonfirmasi',
+    );
   }
+
+  await this.prisma.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.ACCEPTED, acceptedAt: new Date() },
+  });
+
+  return { message: 'Order diterima' };
+}
 
   // ─── Vendor: Reject ──────────────────────────────────────
   async rejectOrder(userId: number, orderId: number, dto: RejectOrderDto) {
