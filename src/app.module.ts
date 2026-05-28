@@ -16,6 +16,7 @@ import { OrderModule } from './order/order.module';
 import { PaymentModule } from './payment/payment.module';
 import { RatingModule } from './rating/rating.module';
 import { UserModule } from './user/user.module';
+import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { UserModule } from './user/user.module';
     OrderModule,
     PaymentModule,
     RatingModule,
-    UserModule,],
+    UserModule,
+    WebhookModule,],
   controllers: [AppController],
   providers: [AppService],
 })
