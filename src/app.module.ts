@@ -12,9 +12,13 @@ import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { VendorModule } from './vendor/vendor.module';
 import { MenuModule } from './menu/menu.module';
+import { OrderModule } from './order/order.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
-  imports: [PrismaModule, ConfigModule,
+  imports: [
+    PrismaModule, 
+    ConfigModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -28,7 +32,9 @@ import { MenuModule } from './menu/menu.module';
     UploadModule,
     AdminModule,
     VendorModule,
-    MenuModule,],
+    MenuModule,
+    OrderModule,
+    PaymentModule,],
   controllers: [AppController],
   providers: [AppService],
 })
