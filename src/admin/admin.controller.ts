@@ -25,6 +25,7 @@ import { Role } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -43,10 +44,15 @@ export class AdminController {
   @Get('vendors')
   @ApiOperation({ summary: 'List semua vendor' })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
-  listVendors(@Query('isActive') isActive?: string) {
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listVendors(
+    @Query() pagination: PaginationDto,
+    @Query('isActive') isActive?: string,
+  ) {
     const filter =
       isActive === 'true' ? true : isActive === 'false' ? false : undefined;
-    return this.adminService.listVendors(filter);
+    return this.adminService.listVendors(pagination, filter);
   }
 
   @Post('vendors')
@@ -92,8 +98,13 @@ export class AdminController {
   @Get('customers')
   @ApiOperation({ summary: 'List semua customer' })
   @ApiQuery({ name: 'search', required: false })
-  listCustomers(@Query('search') search?: string) {
-    return this.adminService.listCustomers(search);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listCustomers(
+    @Query() pagination: PaginationDto,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listCustomers(pagination, search);
   }
 
   @Get('customers/:id')

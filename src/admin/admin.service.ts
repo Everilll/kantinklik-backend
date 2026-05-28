@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { paginate } from '../common/helpers/paginate.helper';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -18,15 +20,25 @@ export class AdminService {
 
   // ─── Vendor ──────────────────────────────────────────────
 
-  async listVendors(isActive?: boolean) {
-    return this.prisma.vendorProfile.findMany({
-      where: isActive !== undefined ? { isActive } : undefined,
-      include: {
-        user: { select: { id: true, email: true, name: true, whatsappNumber: true } },
-        _count: { select: { menus: true } },
-      },
-      orderBy: { canteenNumber: 'asc' },
-    });
+  async listVendors(pagination: PaginationDto, isActive?: boolean) {
+    const { skip, page, limit } = pagination;
+    const where = isActive !== undefined ? { isActive } : {};
+
+    const [vendors, total] = await this.prisma.$transaction([
+      this.prisma.vendorProfile.findMany({
+        where,
+        include: {
+          user: { select: { id: true, email: true, name: true, whatsappNumber: true } },
+          _count: { select: { menus: true } },
+        },
+        orderBy: { canteenNumber: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.vendorProfile.count({ where }),
+    ]);
+
+    return paginate(vendors, total, page!, limit!);
   }
 
   async createVendor(dto: CreateVendorDto) {
@@ -44,7 +56,6 @@ export class AdminService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // Buat User + VendorProfile dalam satu transaction
     const vendor = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -53,7 +64,7 @@ export class AdminService {
           name: dto.name,
           whatsappNumber: dto.whatsappNumber,
           role: 'VENDOR',
-          isVerified: true, // vendor langsung aktif, dibuat oleh admin
+          isVerified: true,
         },
       });
 
@@ -84,7 +95,6 @@ export class AdminService {
   async updateVendor(vendorProfileId: number, dto: UpdateVendorDto) {
     const profile = await this.prisma.vendorProfile.findUnique({
       where: { id: vendorProfileId },
-      include: { user: true },
     });
     if (!profile) throw new NotFoundException('Vendor tidak ditemukan');
 
@@ -97,7 +107,6 @@ export class AdminService {
           data: { ...(name && { name }), ...(whatsappNumber && { whatsappNumber }) },
         });
       }
-
       await tx.vendorProfile.update({
         where: { id: vendorProfileId },
         data: {
@@ -147,27 +156,38 @@ export class AdminService {
 
   // ─── Customer ────────────────────────────────────────────
 
-  async listCustomers(search?: string) {
-    return this.prisma.user.findMany({
-      where: {
-        role: 'CUSTOMER',
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        whatsappNumber: true,
-        isVerified: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async listCustomers(pagination: PaginationDto, search?: string) {
+    const { skip, page, limit } = pagination;
+
+    const where = {
+      role: 'CUSTOMER' as const,
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
+
+    const [customers, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          whatsappNumber: true,
+          isVerified: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return paginate(customers, total, page!, limit!);
   }
 
   async getCustomer(customerId: number) {
@@ -198,8 +218,6 @@ export class AdminService {
       data: { isVerified },
     });
 
-    return {
-      message: `Customer berhasil di${isVerified ? '' : 'un'}verifikasi`,
-    };
+    return { message: `Customer berhasil di${isVerified ? '' : 'un'}verifikasi` };
   }
 }
