@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { VendorService } from './vendor.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -31,15 +32,21 @@ import { ImageFilePipe } from '../upload/pipes/image-file.pipe';
 @ApiTags('Vendors')
 @Controller()
 export class VendorController {
-  constructor(private vendorsService: VendorService) {}
+  constructor(private vendorService: VendorService) {}
 
   // ─── Public ──────────────────────────────────────────────
 
   @Get('vendors')
   @ApiOperation({ summary: 'List semua vendor aktif' })
   @ApiQuery({ name: 'canteenNumber', required: false, type: Number })
-  listVendors(@Query('canteenNumber') canteenNumber?: string) {
-    return this.vendorsService.listVendors(
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listVendors(
+    @Query() pagination: PaginationDto,
+    @Query('canteenNumber') canteenNumber?: string,
+  ) {
+    return this.vendorService.listVendors(
+      pagination,
       canteenNumber ? parseInt(canteenNumber) : undefined,
     );
   }
@@ -47,20 +54,24 @@ export class VendorController {
   @Get('vendors/:id')
   @ApiOperation({ summary: 'Detail vendor + avgRating + jumlah menu' })
   getVendorDetail(@Param('id', ParseIntPipe) id: number) {
-    return this.vendorsService.getVendorDetail(id);
+    return this.vendorService.getVendorDetail(id);
   }
 
   @Get('vendors/:id/menus')
   @ApiOperation({ summary: 'List menu dari vendor tertentu' })
   @ApiQuery({ name: 'categoryId', required: false, type: Number })
   @ApiQuery({ name: 'isAvailable', required: false, type: Boolean })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   getVendorMenus(
     @Param('id', ParseIntPipe) id: number,
+    @Query() pagination: PaginationDto,
     @Query('categoryId') categoryId?: string,
     @Query('isAvailable') isAvailable?: string,
   ) {
-    return this.vendorsService.getVendorMenus(
+    return this.vendorService.getVendorMenus(
       id,
+      pagination,
       categoryId ? parseInt(categoryId) : undefined,
       isAvailable === 'true' ? true : isAvailable === 'false' ? false : undefined,
     );
@@ -74,7 +85,7 @@ export class VendorController {
   @Roles(Role.VENDOR)
   @ApiOperation({ summary: 'Lihat profil vendor sendiri' })
   getSelfProfile(@CurrentUser() user: { id: number }) {
-    return this.vendorsService.getSelfProfile(user.id);
+    return this.vendorService.getSelfProfile(user.id);
   }
 
   @Patch('vendor/profile')
@@ -86,7 +97,7 @@ export class VendorController {
     @CurrentUser() user: { id: number },
     @Body() dto: { canteenName?: string; description?: string },
   ) {
-    return this.vendorsService.updateSelfProfile(user.id, dto);
+    return this.vendorService.updateSelfProfile(user.id, dto);
   }
 
   @Post('vendor/logo')
@@ -106,6 +117,6 @@ export class VendorController {
     @CurrentUser() user: { id: number },
     @UploadedFile(new ImageFilePipe()) file: Express.Multer.File,
   ) {
-    return this.vendorsService.uploadSelfLogo(user.id, file);
+    return this.vendorService.uploadSelfLogo(user.id, file);
   }
 }

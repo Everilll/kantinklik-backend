@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { paginate } from '../common/helpers/paginate.helper';
 
 @Injectable()
 export class VendorService {
@@ -11,22 +13,33 @@ export class VendorService {
 
   // ─── Public ──────────────────────────────────────────────
 
-  async listVendors(canteenNumber?: number) {
-    return this.prisma.vendorProfile.findMany({
-      where: {
-        isActive: true,
-        ...(canteenNumber && { canteenNumber }),
-      },
-      select: {
-        id: true,
-        canteenNumber: true,
-        canteenName: true,
-        description: true,
-        logoUrl: true,
-        _count: { select: { menus: true } },
-      },
-      orderBy: { canteenNumber: 'asc' },
-    });
+  async listVendors(pagination: PaginationDto, canteenNumber?: number) {
+    const { skip, page, limit } = pagination;
+
+    const where = {
+      isActive: true,
+      ...(canteenNumber && { canteenNumber }),
+    };
+
+    const [vendors, total] = await this.prisma.$transaction([
+      this.prisma.vendorProfile.findMany({
+        where,
+        select: {
+          id: true,
+          canteenNumber: true,
+          canteenName: true,
+          description: true,
+          logoUrl: true,
+          _count: { select: { menus: true } },
+        },
+        orderBy: { canteenNumber: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.vendorProfile.count({ where }),
+    ]);
+
+    return paginate(vendors, total, page!, limit!);
   }
 
   async getVendorDetail(vendorId: number) {
@@ -43,7 +56,7 @@ export class VendorService {
     });
     if (!vendor) throw new NotFoundException('Vendor tidak ditemukan');
 
-    // Hitung avgRating vendor dari semua rating menu-nya
+    // Hitung avgRating vendor real-time dari semua rating menu-nya
     const ratingAgg = await this.prisma.rating.aggregate({
       where: { vendorId },
       _avg: { stars: true },
@@ -52,28 +65,45 @@ export class VendorService {
 
     return {
       ...vendor,
-      avgRating: ratingAgg._avg.stars ?? 0,
+      menuCount: vendor._count.menus,
+      avgRating: Number((ratingAgg._avg.stars ?? 0).toFixed(2)),
       totalRatings: ratingAgg._count,
     };
   }
 
-  async getVendorMenus(vendorId: number, categoryId?: number, isAvailable?: boolean) {
+  async getVendorMenus(
+    vendorId: number,
+    pagination: PaginationDto,
+    categoryId?: number,
+    isAvailable?: boolean,
+  ) {
     const vendor = await this.prisma.vendorProfile.findFirst({
       where: { id: vendorId, isActive: true },
     });
     if (!vendor) throw new NotFoundException('Vendor tidak ditemukan');
 
-    return this.prisma.menu.findMany({
-      where: {
-        vendorId,
-        ...(categoryId && { categoryId }),
-        ...(isAvailable !== undefined && { isAvailable }),
-      },
-      include: {
-        category: { select: { id: true, name: true, type: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const { skip, page, limit } = pagination;
+
+    const where = {
+      vendorId,
+      ...(categoryId && { categoryId }),
+      ...(isAvailable !== undefined && { isAvailable }),
+    };
+
+    const [menus, total] = await this.prisma.$transaction([
+      this.prisma.menu.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { name: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.menu.count({ where }),
+    ]);
+
+    return paginate(menus, total, page!, limit!);
   }
 
   // ─── Vendor Self ─────────────────────────────────────────
