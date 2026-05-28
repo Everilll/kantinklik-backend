@@ -17,11 +17,15 @@ import { PaymentModule } from './payment/payment.module';
 import { RatingModule } from './rating/rating.module';
 import { UserModule } from './user/user.module';
 import { WebhookModule } from './webhook/webhook.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { TaskModule } from './task/task.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
     PrismaModule, 
     ConfigModule,
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -40,7 +44,10 @@ import { WebhookModule } from './webhook/webhook.module';
     PaymentModule,
     RatingModule,
     UserModule,
-    WebhookModule,],
+    WebhookModule,
+    TaskModule,
+    EventsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

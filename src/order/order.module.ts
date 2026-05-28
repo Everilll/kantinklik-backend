@@ -4,9 +4,10 @@ import { OrderService } from './order.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PaymentModule } from '../payment/payment.module';
 import { ConfigModule } from '@nestjs/config';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [PrismaModule, PaymentModule, ConfigModule],
+  imports: [PrismaModule, PaymentModule, ConfigModule, EventsModule],
   controllers: [OrderController],
   providers: [OrderService],
   exports: [OrderService],

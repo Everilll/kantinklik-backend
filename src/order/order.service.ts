@@ -14,6 +14,7 @@ import { OrderStatus, Prisma } from '@prisma/client';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { paginate } from '../common/helpers/paginate.helper';
 import { ConfigService } from '@nestjs/config';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class OrderService {
@@ -22,7 +23,8 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private paymentService: PaymentService,
-    private config: ConfigService
+    private config: ConfigService,
+    private eventsGateway: EventsGateway,
   ) { }
 
   // ─── Customer: Checkout ──────────────────────────────────
@@ -159,6 +161,12 @@ export class OrderService {
               paymentReference: paymentResult.paymentReference,
             },
           });
+
+          // Notifikasi vendor (Hanya kirim notif Real-time kalau pesanan Cash karena gausah tunggu bayar)
+          if (dto.paymentMethod === 'CASH') {
+            const vendorUserId = menus[0].vendor.userId; 
+            this.eventsGateway.notifyVendorNewOrder(vendorUserId, order.id, totalAmount);
+          }
 
           return {
             message: 'Order berhasil dibuat',
