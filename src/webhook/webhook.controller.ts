@@ -75,6 +75,13 @@ export class WebhookController {
       return { received: true };
     }
 
+    if (order.status === OrderStatus.CANCELLED) {
+      this.logger.log(
+        `Xendit webhook: order ${order.orderCode} sudah CANCELLED sebelumnya, skip`,
+      );
+      return { received: true };
+    }
+
     const isSuccess =
       eventType.includes('SUCCEEDED') ||
       eventType.includes('succeeded') ||
@@ -116,6 +123,7 @@ export class WebhookController {
           data: {
             status: OrderStatus.CANCELLED,
             cancelledAt: new Date(),
+            rejectionReason: 'Pembayaran gagal atau kadaluarsa (Xendit)',
           },
         });
       });
