@@ -16,8 +16,10 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Kirim OTP untuk reset password' })
-  @ApiResponse({ status: 200, description: 'Cek email untuk OTP' })
-  @ApiResponse({ status: 404, description: 'Email tidak ditemukan' })
+  @ApiResponse({
+    status: 200,
+    description: 'Respons generik — OTP hanya dikirim jika email valid & terverifikasi',
+  })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }

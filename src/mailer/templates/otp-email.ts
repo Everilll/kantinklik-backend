@@ -1,16 +1,26 @@
 export function otpEmailTemplate(
   name: string,
   code: string,
-  ttlMinutes: number
+  ttlMinutes: number,
+  purpose: 'REGISTER' | 'RESET_PASSWORD' = 'REGISTER',
 ): string {
   const year = new Date().getFullYear();
+  const isReset = purpose === 'RESET_PASSWORD';
+
+  const heading = isReset
+    ? 'Gunakan kode OTP berikut untuk mereset password akun kamu di KantinKlik.'
+    : 'Gunakan kode OTP berikut untuk memverifikasi akun kamu di KantinKlik.';
+
+  const footer = isReset
+    ? 'Jika kamu tidak merasa meminta reset password di KantinKlik, abaikan email ini dan password kamu tidak akan berubah.'
+    : 'Jika kamu tidak merasa melakukan pendaftaran di KantinKlik, kamu dapat mengabaikan email ini dengan aman.';
 
   return `
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Verifikasi OTP KantinKlik</title>
+  <title>${isReset ? 'Reset Password' : 'Verifikasi OTP'} KantinKlik</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,sans-serif;color:#18181b;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
@@ -32,7 +42,7 @@ export function otpEmailTemplate(
               </p>
 
               <p style="margin:0 0 24px;font-size:15px;line-height:1.8;color:#52525b;">
-                Gunakan kode OTP berikut untuk memverifikasi akun kamu di KantinKlik.
+                ${heading}
               </p>
 
               <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:24px;text-align:center;margin:32px 0;">
@@ -46,8 +56,7 @@ export function otpEmailTemplate(
               </p>
 
               <p style="margin:32px 0 0;font-size:13px;line-height:1.7;color:#71717a;">
-                Jika kamu tidak merasa melakukan pendaftaran atau login di KantinKlik,
-                kamu dapat mengabaikan email ini dengan aman.
+                ${footer}
               </p>
             </td>
           </tr>

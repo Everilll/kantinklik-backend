@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { otpEmailTemplate } from './templates/otp-email';
+import { OtpPurpose } from '../otp/otp.constants';
 
 @Injectable()
 export class MailerService {
@@ -16,10 +17,20 @@ export class MailerService {
     this.isDev = this.config.get<string>('NODE_ENV') !== 'production';
   }
 
-  async sendOtp(to: string, name: string, code: string, ttlMinutes: number): Promise<void> {
-    // Dev mode: cukup log ke console, tidak perlu kirim email beneran
+  async sendOtp(
+    to: string,
+    name: string,
+    code: string,
+    ttlMinutes: number,
+    purpose: OtpPurpose = 'REGISTER',
+  ): Promise<void> {
+    const isReset = purpose === 'RESET_PASSWORD';
+    const subject = isReset
+      ? 'Reset Password KantinKlik'
+      : 'Kode OTP KantinKlik';
+
     if (this.isDev) {
-      this.logger.log(`[DEV MODE] OTP untuk ${to}: ${code}`);
+      this.logger.log(`[DEV MODE] OTP (${purpose}) untuk ${to}: ${code}`);
       return;
     }
 
@@ -27,10 +38,10 @@ export class MailerService {
       const response = await this.resend.emails.send({
         from: this.fromEmail,
         to,
-        subject: 'Kode OTP KantinKlik',
-        html: otpEmailTemplate(name, code, ttlMinutes),
+        subject,
+        html: otpEmailTemplate(name, code, ttlMinutes, purpose),
       });
-      
+
       if (response.error) {
         this.logger.error(`Resend API Error: ${response.error.message}`, response.error);
       } else {

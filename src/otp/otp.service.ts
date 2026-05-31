@@ -3,16 +3,22 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerService } from '../mailer/mailer.service';
 import { HashingService } from '../common/hashing/hashing.service';
-import { OTP_LENGTH } from './otp.constants';
+import {
+  OTP_LENGTH,
+  OTP_PURPOSE,
+  type OtpPurpose,
+} from './otp.constants';
 
 @Injectable()
 export class OtpService {
   private readonly ttlMinutes: number;
   private readonly cooldownSeconds: number;
   private readonly maxPerHour: number;
+  private readonly maxVerifyAttempts: number;
 
   constructor(
     private prisma: PrismaService,
@@ -23,10 +29,16 @@ export class OtpService {
     this.ttlMinutes = this.config.get<number>('OTP_TTL_MINUTES') ?? 5;
     this.cooldownSeconds = this.config.get<number>('OTP_COOLDOWN_SECONDS') ?? 60;
     this.maxPerHour = this.config.get<number>('OTP_MAX_PER_HOUR') ?? 5;
+    this.maxVerifyAttempts =
+      this.config.get<number>('OTP_MAX_VERIFY_ATTEMPTS') ?? 5;
   }
 
   // ─── Generate & kirim OTP ────────────────────────────────
-  async issue(email: string, name: string, purpose = 'REGISTER'): Promise<Date> {
+  async issue(
+    email: string,
+    name: string,
+    purpose: OtpPurpose = OTP_PURPOSE.REGISTER,
+  ): Promise<Date> {
     await this.checkRateLimit(email);
 
     const code = this.generateCode();
@@ -38,14 +50,17 @@ export class OtpService {
     });
 
     await this.updateRateLimit(email);
-    await this.mailer.sendOtp(email, name, code, this.ttlMinutes);
+    await this.mailer.sendOtp(email, name, code, this.ttlMinutes, purpose);
 
     return expiresAt;
   }
 
   // ─── Verifikasi OTP ──────────────────────────────────────
-  async verify(email: string, code: string, purpose = 'REGISTER'): Promise<void> {
-    // Ambil token terbaru yang belum dikonsumsi dan belum expired
+  async verify(
+    email: string,
+    code: string,
+    purpose: OtpPurpose = OTP_PURPOSE.REGISTER,
+  ): Promise<void> {
     const token = await this.prisma.otpToken.findFirst({
       where: {
         email,
@@ -62,10 +77,24 @@ export class OtpService {
 
     const isMatch = await this.hashingService.compare(code, token.codeHash);
     if (!isMatch) {
+      const updated = await this.prisma.otpToken.update({
+        where: { id: token.id },
+        data: { attemptCount: { increment: 1 } },
+      });
+
+      if (updated.attemptCount >= this.maxVerifyAttempts) {
+        await this.prisma.otpToken.update({
+          where: { id: token.id },
+          data: { consumedAt: new Date() },
+        });
+        throw new BadRequestException(
+          'Terlalu banyak percobaan salah. Silakan minta OTP baru',
+        );
+      }
+
       throw new BadRequestException('Kode OTP salah');
     }
 
-    // Mark sebagai consumed
     await this.prisma.otpToken.update({
       where: { id: token.id },
       data: { consumedAt: new Date() },
@@ -80,7 +109,6 @@ export class OtpService {
     });
 
     if (record) {
-      // Cek cooldown (jarak dari request terakhir)
       const secondsSinceLast =
         (now.getTime() - record.lastRequestAt.getTime()) / 1000;
       if (secondsSinceLast < this.cooldownSeconds) {
@@ -90,7 +118,6 @@ export class OtpService {
         );
       }
 
-      // Cek max per jam (sliding window 1 jam)
       const windowStart = new Date(now.getTime() - 60 * 60 * 1000);
       const isInSameWindow = record.windowStartAt > windowStart;
 
@@ -111,14 +138,12 @@ export class OtpService {
     });
 
     if (!existing || existing.windowStartAt < windowStart) {
-      // Window baru — reset counter
       await this.prisma.otpRateLimit.upsert({
         where: { email },
         update: { requestsInWindow: 1, windowStartAt: now, lastRequestAt: now },
         create: { email, requestsInWindow: 1, windowStartAt: now, lastRequestAt: now },
       });
     } else {
-      // Masih dalam window yang sama — increment
       await this.prisma.otpRateLimit.update({
         where: { email },
         data: {
@@ -129,12 +154,10 @@ export class OtpService {
     }
   }
 
-  // ─── Helper ──────────────────────────────────────────────
   private generateCode(): string {
-    const digits = '0123456789';
     let code = '';
     for (let i = 0; i < OTP_LENGTH; i++) {
-      code += digits[Math.floor(Math.random() * digits.length)];
+      code += randomInt(0, 10).toString();
     }
     return code;
   }

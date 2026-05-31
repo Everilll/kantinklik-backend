@@ -8,6 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
+import { OTP_PURPOSE } from '../otp/otp.constants';
 import { LoginDto } from './dto/login.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { HashingService } from '../common/hashing/hashing.service';
@@ -32,11 +33,10 @@ export class AuthService {
       if (existing.isVerified) {
         throw new ConflictException('Email sudah terdaftar');
       }
-      // Sudah daftar tapi belum verifikasi — kirim ulang OTP
       const expiresAt = await this.otpService.issue(
         dto.email,
         existing.name,
-        'REGISTER',
+        OTP_PURPOSE.REGISTER,
       );
       return {
         message: 'OTP dikirim ulang. Silakan cek email kamu',
@@ -57,7 +57,11 @@ export class AuthService {
       },
     });
 
-    const expiresAt = await this.otpService.issue(user.email, user.name, 'REGISTER');
+    const expiresAt = await this.otpService.issue(
+      user.email,
+      user.name,
+      OTP_PURPOSE.REGISTER,
+    );
 
     return {
       message: 'Registrasi berhasil. Silakan cek email untuk kode OTP',
@@ -71,7 +75,7 @@ export class AuthService {
     if (!user) throw new NotFoundException('Email tidak ditemukan');
     if (user.isVerified) throw new BadRequestException('Akun sudah terverifikasi');
 
-    await this.otpService.verify(email, code, 'REGISTER');
+    await this.otpService.verify(email, code, OTP_PURPOSE.REGISTER);
 
     await this.prisma.user.update({
       where: { email },
@@ -95,7 +99,11 @@ export class AuthService {
     if (!user) throw new NotFoundException('Email tidak ditemukan');
     if (user.isVerified) throw new BadRequestException('Akun sudah terverifikasi');
 
-    const expiresAt = await this.otpService.issue(email, user.name, 'REGISTER');
+    const expiresAt = await this.otpService.issue(
+      email,
+      user.name,
+      OTP_PURPOSE.REGISTER,
+    );
 
     return {
       message: 'OTP berhasil dikirim ulang',
@@ -112,7 +120,10 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Email atau password salah');
 
-    const passwordMatch = await this.hashingService.compare(dto.password, user.passwordHash);
+    const passwordMatch = await this.hashingService.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!passwordMatch) throw new UnauthorizedException('Email atau password salah');
 
     if (!user.isVerified) {
@@ -137,42 +148,61 @@ export class AuthService {
       },
     };
   }
-    // ─── Forgot Password ─────────────────────────────────────
-    async forgotPassword(email: string) {
-      const user = await this.prisma.user.findUnique({
-        where: { email },
-      });
-  
-      if (!user) {
-        throw new NotFoundException('Akun dengan email tersebut tidak ditemukan');
-      }
-  
-      const expiresAt = await this.otpService.issue(email, user.name);
-      return {
-        message: 'Kode OTP untuk reset password telah dikirim ke email',
-        otpExpiresAt: expiresAt,
-      };
+
+  // ─── Forgot Password ─────────────────────────────────────
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (user?.isVerified) {
+      await this.otpService.issue(email, user.name, OTP_PURPOSE.RESET_PASSWORD);
     }
 
-    // ─── Reset Password ──────────────────────────────────────
-    async resetPassword(dto: ResetPasswordDto) {
-      const user = await this.prisma.user.findUnique({
-        where: { email: dto.email },
-      });
-  
-      if (!user) throw new NotFoundException('Akun tidak ditemukan');
-  
-      await this.otpService.verify(dto.email, dto.otpCode);
-  
-      const hashedPassword = await this.hashingService.hash(dto.newPassword);
-  
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { passwordHash: hashedPassword },
-      });
-  
-      return { message: 'Password berhasil diubah. Silakan login kembali.' };
+    return {
+      message:
+        'Jika email terdaftar dan sudah diverifikasi, kode OTP untuk reset password telah dikirim',
+    };
+  }
+
+  // ─── Reset Password ──────────────────────────────────────
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) throw new NotFoundException('Akun tidak ditemukan');
+
+    if (!user.isVerified) {
+      throw new BadRequestException(
+        'Akun belum diverifikasi. Selesaikan verifikasi registrasi terlebih dahulu',
+      );
     }
+
+    await this.otpService.verify(
+      dto.email,
+      dto.otpCode,
+      OTP_PURPOSE.RESET_PASSWORD,
+    );
+
+    const isSamePassword = await this.hashingService.compare(
+      dto.newPassword,
+      user.passwordHash,
+    );
+    if (isSamePassword) {
+      throw new BadRequestException('Password baru harus berbeda dari password lama');
+    }
+
+    const hashedPassword = await this.hashingService.hash(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hashedPassword },
+    });
+
+    return { message: 'Password berhasil diubah. Silakan login kembali.' };
+  }
+
   // ─── Helper ──────────────────────────────────────────────
   private generateToken(userId: number, email: string, role: string): string {
     return this.jwtService.sign({ sub: userId, email, role });
