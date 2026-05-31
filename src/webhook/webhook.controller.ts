@@ -7,12 +7,14 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
 
 @ApiTags('Webhooks')
+@SkipThrottle()
 @Controller('webhooks')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
