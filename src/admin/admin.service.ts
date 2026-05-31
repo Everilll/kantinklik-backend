@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
+import { HashingService } from '../common/hashing/hashing.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -16,6 +17,7 @@ export class AdminService {
   constructor(
     private prisma: PrismaService,
     private upload: UploadService,
+    private hashingService: HashingService,
   ) {}
 
   // ─── Vendor ──────────────────────────────────────────────
@@ -219,5 +221,40 @@ export class AdminService {
     });
 
     return { message: `Customer berhasil di${isVerified ? '' : 'un'}verifikasi` };
+  }
+
+  async resetCustomerPassword(customerId: number, newPassword: string) {
+    return this.resetUserPassword(customerId, 'CUSTOMER', newPassword);
+  }
+
+  async resetVendorPassword(vendorProfileId: number, newPassword: string) {
+    const profile = await this.prisma.vendorProfile.findUnique({
+      where: { id: vendorProfileId },
+    });
+    if (!profile) throw new NotFoundException('Vendor tidak ditemukan');
+
+    return this.resetUserPassword(profile.userId, 'VENDOR', newPassword);
+  }
+
+  private async resetUserPassword(
+    userId: number,
+    expectedRole: 'CUSTOMER' | 'VENDOR',
+    newPassword: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user || user.role !== expectedRole) {
+      const label = expectedRole === 'CUSTOMER' ? 'Customer' : 'Vendor';
+      throw new NotFoundException(`${label} tidak ditemukan`);
+    }
+
+    const passwordHash = await this.hashingService.hash(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: 'Password berhasil direset' };
   }
 }

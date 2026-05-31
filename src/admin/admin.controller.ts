@@ -25,6 +25,7 @@ import { Role } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
+import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -120,5 +121,23 @@ export class AdminController {
     @Body('isVerified') isVerified: boolean,
   ) {
     return this.adminService.toggleCustomerVerified(id, isVerified);
+  }
+
+  @Patch('customers/:id/reset-password')
+  @ApiOperation({ summary: '[ADMIN] Reset password customer' })
+  resetCustomerPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AdminResetPasswordDto,
+  ) {
+    return this.adminService.resetCustomerPassword(id, dto.newPassword);
+  }
+
+  @Patch('vendors/:id/reset-password')
+  @ApiOperation({ summary: '[ADMIN] Reset password vendor' })
+  resetVendorPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AdminResetPasswordDto,
+  ) {
+    return this.adminService.resetVendorPassword(id, dto.newPassword);
   }
 }
