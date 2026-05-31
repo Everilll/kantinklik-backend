@@ -35,6 +35,7 @@ export const envValidationSchema = Joi.object({
   OTP_TTL_MINUTES: Joi.number().default(5),
   OTP_COOLDOWN_SECONDS: Joi.number().default(60),
   OTP_MAX_PER_HOUR: Joi.number().default(5),
+  OTP_MAX_VERIFY_ATTEMPTS: Joi.number().default(5),
 
   // ─── Admin seed ───────────────────────────────────────────
   ADMIN_SEED_EMAILS: Joi.string().required(),

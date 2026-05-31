@@ -203,15 +203,16 @@ model Rating {
 }
 
 model OtpToken {
-  id         Int       @id @default(autoincrement())
-  email      String
-  codeHash   String
-  purpose    String    @default("REGISTER")
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
+  id           Int       @id @default(autoincrement())
+  email        String
+  codeHash     String
+  purpose      String    @default("REGISTER")
+  attemptCount Int       @default(0)
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
-  @@index([email, createdAt])
+  @@index([email, purpose, createdAt])
   @@map("otp_tokens")
 }
 
