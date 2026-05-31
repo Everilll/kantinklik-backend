@@ -11,7 +11,7 @@ CREATE TYPE "SettlementMode" AS ENUM ('MANUAL', 'AUTO');
 ALTER TABLE "orders" ADD COLUMN     "platformFee" DECIMAL(10,2) NOT NULL DEFAULT 0,
 ADD COLUMN     "serviceFee" DECIMAL(10,2) NOT NULL DEFAULT 0,
 ADD COLUMN     "serviceFeeRate" DECIMAL(5,4) NOT NULL DEFAULT 0,
-ADD COLUMN     "totalAmount" DECIMAL(10,2) NOT NULL;
+ADD COLUMN     "totalAmount" DECIMAL(10,2) NOT NULL DEFAULT 0;
 
 -- AlterTable
 ALTER TABLE "vendor_profiles" ADD COLUMN     "bankAccountName" TEXT,
