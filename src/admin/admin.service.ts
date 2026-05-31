@@ -252,7 +252,10 @@ export class AdminService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        tokenVersion: { increment: 1 },
+      },
     });
 
     return { message: 'Password berhasil direset' };

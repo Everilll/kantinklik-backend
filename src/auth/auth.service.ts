@@ -82,7 +82,7 @@ export class AuthService {
       data: { isVerified: true },
     });
 
-    const token = this.generateToken(user.id, user.email, user.role);
+    const token = this.generateToken(user.id, user.email, user.role, user.tokenVersion);
 
     return {
       message: 'Verifikasi berhasil',
@@ -132,7 +132,7 @@ export class AuthService {
       );
     }
 
-    const token = this.generateToken(user.id, user.email, user.role);
+    const token = this.generateToken(user.id, user.email, user.role, user.tokenVersion);
 
     return {
       message: 'Login berhasil',
@@ -197,14 +197,22 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: hashedPassword },
+      data: {
+        passwordHash: hashedPassword,
+        tokenVersion: { increment: 1 },
+      },
     });
 
     return { message: 'Password berhasil diubah. Silakan login kembali.' };
   }
 
   // ─── Helper ──────────────────────────────────────────────
-  private generateToken(userId: number, email: string, role: string): string {
-    return this.jwtService.sign({ sub: userId, email, role });
+  private generateToken(
+    userId: number,
+    email: string,
+    role: string,
+    tokenVersion: number,
+  ): string {
+    return this.jwtService.sign({ sub: userId, email, role, tv: tokenVersion });
   }
 }

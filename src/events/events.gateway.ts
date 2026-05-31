@@ -8,6 +8,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @WebSocketGateway({
   cors: {
@@ -22,7 +24,10 @@ export class EventsGateway
 
   private logger: Logger = new Logger('EventsGateway');
 
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private prisma: PrismaService,
+  ) {}
 
   afterInit(server: Server) {
     this.logger.log('WebSocket Gateway Initialized');
@@ -30,30 +35,44 @@ export class EventsGateway
 
   async handleConnection(client: Socket, ...args: any[]) {
     try {
-      // Ambil token dari query string (biasanya frontend kirim ?token=xxx) atau header Authorization
-      const rawToken = client.handshake.query.token || client.handshake.headers.authorization?.split(' ')[1];
-      
+      const rawToken =
+        client.handshake.query.token ||
+        client.handshake.headers.authorization?.split(' ')[1];
+
       if (!rawToken) {
         this.logger.warn(`Client disconnected (no token): ${client.id}`);
         client.disconnect();
         return;
       }
 
-      // Verifikasi token (sama seperti verifyAuth)
       const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
-      const payload = await this.jwtService.verifyAsync(token); // akan throw error kalau invalid
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
 
-      // Simpan user info di objek client
-      client.data.user = payload;
-      
-      // Join ke "ruang" (room) berdasarkan ID mereka (misal: 'user_12', 'vendor_4')
-      client.join(`user_${payload.sub}`);
-      
-      if (payload.role === 'VENDOR') {
-        client.join(`vendor_${payload.sub}`); // Bisa nembak event khusus vendor
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { tokenVersion: true, isVerified: true },
+      });
+
+      if (
+        !user ||
+        !user.isVerified ||
+        (payload.tv ?? 0) !== user.tokenVersion
+      ) {
+        this.logger.warn(`Client disconnected (invalid session): ${client.id}`);
+        client.disconnect();
+        return;
       }
 
-      this.logger.log(`Client terhubung: [ID: ${client.id}] | User ID: ${payload.sub} | Role: ${payload.role}`);
+      client.data.user = payload;
+      client.join(`user_${payload.sub}`);
+
+      if (payload.role === 'VENDOR') {
+        client.join(`vendor_${payload.sub}`);
+      }
+
+      this.logger.log(
+        `Client terhubung: [ID: ${client.id}] | User ID: ${payload.sub} | Role: ${payload.role}`,
+      );
     } catch (error) {
       this.logger.error(`Koneksi WebSocket ditolak (invalid JWT): ${client.id}`);
       client.disconnect();
@@ -64,10 +83,12 @@ export class EventsGateway
     this.logger.log(`Client terputus: ${client.id}`);
   }
 
-  // --- METHODS UNTUK DI PANGGIL DARI SERVICE (Order, Payment, dsb) ---
-
-  // Notifikasi Customer saat order statusnya berubah (misal dari ACCEPTED -> READY)
-  notifyCustomerOrderUpdate(customerId: number, orderId: number, status: string, message?: string) {
+  notifyCustomerOrderUpdate(
+    customerId: number,
+    orderId: number,
+    status: string,
+    message?: string,
+  ) {
     this.server.to(`user_${customerId}`).emit('orderUpdate', {
       orderId,
       status,
@@ -75,7 +96,6 @@ export class EventsGateway
     });
   }
 
-  // Notifikasi Vendor saat ada pesanan baru sukses di Checkout (atau berhasil dibayar QRIS)
   notifyVendorNewOrder(vendorUserId: number, orderId: number, total: number) {
     this.server.to(`vendor_${vendorUserId}`).emit('newOrder', {
       orderId,

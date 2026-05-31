@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -18,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   // Payload yang ada di dalam JWT token
-  async validate(payload: { sub: number; email: string; role: string }) {
+  async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: {
@@ -27,6 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         name: true,
         role: true,
         isVerified: true,
+        tokenVersion: true,
         vendorProfile: { select: { id: true } },
       },
     });
@@ -34,6 +36,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) throw new UnauthorizedException('Token tidak valid');
     if (!user.isVerified) throw new UnauthorizedException('Akun belum diverifikasi');
 
-    return user; // ini yang jadi request.user di controller
+    const tokenVersion = payload.tv ?? 0;
+    if (tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedException('Sesi telah berakhir. Silakan login kembali');
+    }
+
+    return user;
   }
 }
