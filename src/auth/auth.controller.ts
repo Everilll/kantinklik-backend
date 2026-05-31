@@ -5,11 +5,31 @@ import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Kirim OTP untuk reset password' })
+  @ApiResponse({ status: 200, description: 'Cek email untuk OTP' })
+  @ApiResponse({ status: 404, description: 'Email tidak ditemukan' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password menggunakan OTP' })
+  @ApiResponse({ status: 200, description: 'Password berhasil diubah' })
+  @ApiResponse({ status: 400, description: 'OTP salah atau expired' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
 
   @Post('register-customer')
   @ApiOperation({ summary: 'Daftar akun customer baru' })

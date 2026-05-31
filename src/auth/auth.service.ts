@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { HashingService } from '../common/hashing/hashing.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 
@@ -136,7 +137,42 @@ export class AuthService {
       },
     };
   }
+    // ─── Forgot Password ─────────────────────────────────────
+    async forgotPassword(email: string) {
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+      });
+  
+      if (!user) {
+        throw new NotFoundException('Akun dengan email tersebut tidak ditemukan');
+      }
+  
+      const expiresAt = await this.otpService.issue(email, user.name);
+      return {
+        message: 'Kode OTP untuk reset password telah dikirim ke email',
+        otpExpiresAt: expiresAt,
+      };
+    }
 
+    // ─── Reset Password ──────────────────────────────────────
+    async resetPassword(dto: ResetPasswordDto) {
+      const user = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+  
+      if (!user) throw new NotFoundException('Akun tidak ditemukan');
+  
+      await this.otpService.verify(dto.email, dto.otpCode);
+  
+      const hashedPassword = await this.hashingService.hash(dto.newPassword);
+  
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: hashedPassword },
+      });
+  
+      return { message: 'Password berhasil diubah. Silakan login kembali.' };
+    }
   // ─── Helper ──────────────────────────────────────────────
   private generateToken(userId: number, email: string, role: string): string {
     return this.jwtService.sign({ sub: userId, email, role });
