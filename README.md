@@ -1,6 +1,6 @@
-#  KantinKlik Backend
+# 🍽️ KantinKlik Backend
 
-Backend API untuk sistem kantin digital **SMK Telkom Malang** — memudahkan siswa memesan makanan dari 12 kantin tanpa antri.
+Backend API untuk sistem kantin digital **SMK Telkom Malang** — memudahkan siswa memesan makanan dari kantin sekolah tanpa antri, dengan notifikasi real-time dan pembayaran QRIS.
 
 > Dibangun sebagai project ujian kenaikan level dengan stack NestJS + Prisma + PostgreSQL.
 
@@ -14,8 +14,12 @@ Backend API untuk sistem kantin digital **SMK Telkom Malang** — memudahkan sis
 | ORM | Prisma 6 |
 | Database | PostgreSQL (Railway) |
 | Auth | JWT + Passport |
+| Real-time | Socket.IO (WebSocket) |
+| Payment | Xendit QRIS Dynamic |
 | Email / OTP | Resend.com |
 | Storage | Cloudinary |
+| Rate Limiter | @nestjs/throttler |
+| Scheduled Tasks | @nestjs/schedule (Cron) |
 | Dokumentasi | Swagger / OpenAPI |
 | Deploy | Railway |
 
@@ -27,11 +31,15 @@ Backend API untuk sistem kantin digital **SMK Telkom Malang** — memudahkan sis
 - **Auth Customer** — Register via email sekolah + verifikasi OTP (rate limit: 5/jam, cooldown 60s)
 - **Order Flow** — Checkout multi-item → Vendor accept/reject → Ready → Complete
 - **Order Code** — Format `KK-YYYYMMDD-XXX`, race-safe dengan retry mechanism
-- **Payment** — Strategy Pattern (Cash phase 1, slot Xendit QRIS phase 2)
+- **Payment QRIS** — Xendit QRIS Dynamic dengan Strategy Pattern (Cash + Online)
+- **Webhook Xendit** — Auto-update pembayaran (PAID/FAILED/EXPIRED) + restock otomatis saat gagal
+- **Real-time Notification** — WebSocket (Socket.IO) push event ke customer & vendor saat status order berubah
+- **Auto-Cancel** — Scheduled task tiap 5 menit membatalkan order PENDING yang lewat 30 menit
 - **Rating** — Per order item, hanya setelah COMPLETED, window 7 hari
 - **Upload** — Gambar menu & logo vendor via Cloudinary (max 2MB, JPEG/PNG/WebP)
 - **Pagination** — Semua list endpoint support `?page=&limit=`
-- **Swagger** — Dokumentasi interaktif di `/api/docs`
+- **Rate Limiting** — Global throttler (100 req/menit) untuk proteksi abuse
+- **Swagger** — Dokumentasi interaktif di `/docs`
 
 ---
 
@@ -43,6 +51,7 @@ Backend API untuk sistem kantin digital **SMK Telkom Malang** — memudahkan sis
 - PostgreSQL (atau Railway)
 - Akun [Resend](https://resend.com) untuk email OTP
 - Akun [Cloudinary](https://cloudinary.com) untuk upload gambar
+- Akun [Xendit](https://xendit.co) untuk pembayaran QRIS (opsional, bisa pakai Cash dulu)
 
 ### Setup
 
@@ -69,7 +78,7 @@ npm run start:dev
 ```
 
 App berjalan di `http://localhost:3000`
-Swagger docs di `http://localhost:3000/api/docs`
+Swagger docs di `http://localhost:3000/docs`
 
 ---
 
@@ -101,6 +110,11 @@ RESEND_FROM_EMAIL=onboarding@resend.dev
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Xendit (pembayaran QRIS)
+XENDIT_SECRET_KEY=xnd_development_xxxxxxxxxxxx
+XENDIT_WEBHOOK_SECRET=your_webhook_secret
+QRIS_SERVICE_FEE_PERCENT=5
 
 # OTP config
 OTP_TTL_MINUTES=5
@@ -144,17 +158,18 @@ Base URL: `/api`
 ### Orders (Customer)
 | Method | Endpoint | Akses | Keterangan |
 |---|---|---|---|
-| POST | `/orders/checkout` | Customer | Buat order |
-| GET | `/orders/me` | Customer | List order saya |
+| POST | `/orders/checkout` | Customer | Buat order (Cash / QRIS) |
+| GET | `/orders/me` | Customer | List order saya (`?status=`) |
 | GET | `/orders/:id` | Customer | Detail order |
 | POST | `/orders/:id/cancel` | Customer | Cancel order (PENDING) |
 
 ### Orders (Vendor)
 | Method | Endpoint | Akses | Keterangan |
 |---|---|---|---|
-| GET | `/vendor/orders` | Vendor | Dashboard order masuk |
+| GET | `/vendor/orders` | Vendor | Dashboard order masuk (`?status=`) |
+| GET | `/vendor/orders/:id` | Vendor | Detail order vendor |
 | POST | `/vendor/orders/:id/accept` | Vendor | Terima order |
-| POST | `/vendor/orders/:id/reject` | Vendor | Tolak order |
+| POST | `/vendor/orders/:id/reject` | Vendor | Tolak order (+ alasan) |
 | POST | `/vendor/orders/:id/ready` | Vendor | Tandai siap diambil |
 | POST | `/vendor/orders/:id/complete` | Vendor | Selesaikan order |
 
@@ -165,7 +180,26 @@ Base URL: `/api`
 | GET | `/ratings/menu/:menuId` | Public | Rating per menu |
 | GET | `/ratings/vendor/:vendorId` | Public | Rating per vendor |
 
-> Dokumentasi lengkap semua endpoint tersedia di Swagger: [`/api/docs`](https://kantinklik.railway.app/api/docs)
+### Admin
+| Method | Endpoint | Akses | Keterangan |
+|---|---|---|---|
+| GET | `/admin/vendors` | Admin | List semua vendor (`?isActive=`) |
+| POST | `/admin/vendors` | Admin | Buat akun vendor baru |
+| PATCH | `/admin/vendors/:id` | Admin | Update data vendor |
+| DELETE | `/admin/vendors/:id` | Admin | Nonaktifkan vendor (soft delete) |
+| POST | `/admin/vendors/:id/logo` | Admin | Upload logo vendor |
+| PATCH | `/admin/vendors/:id/reset-password` | Admin | Reset password vendor |
+| GET | `/admin/customers` | Admin | List semua customer (`?search=`) |
+| GET | `/admin/customers/:id` | Admin | Detail customer |
+| PATCH | `/admin/customers/:id/verify` | Admin | Toggle verifikasi customer |
+| PATCH | `/admin/customers/:id/reset-password` | Admin | Reset password customer |
+
+### Webhooks
+| Method | Endpoint | Akses | Keterangan |
+|---|---|---|---|
+| POST | `/webhooks/xendit` | Internal | Xendit payment callback |
+
+> Dokumentasi lengkap semua endpoint tersedia di Swagger: [`/docs`](https://kantinklik.railway.app/docs)
 
 ---
 
@@ -174,8 +208,43 @@ Base URL: `/api`
 ```
 PENDING ──→ ACCEPTED ──→ READY ──→ COMPLETED
        ╲──→ REJECTED
-PENDING ──→ CANCELLED  (by customer)
+PENDING ──→ CANCELLED  (by customer / auto-cancel 30min)
 ```
+
+### Payment Flow (QRIS)
+
+```
+Checkout (ONLINE) → Xendit QRIS Created (UNPAID)
+                        ├── Webhook: SUCCEEDED → paymentStatus = PAID
+                        └── Webhook: FAILED/EXPIRED → CANCELLED + restock
+```
+
+---
+
+## 🔌 WebSocket Events
+
+Koneksi via Socket.IO dengan JWT authentication:
+
+```javascript
+const socket = io('https://your-domain.com', {
+  query: { token: 'jwt_token_here' }
+});
+```
+
+### Events yang di-emit server:
+
+| Event | Target | Payload | Keterangan |
+|---|---|---|---|
+| `orderUpdate` | Customer (room `user_{id}`) | `{ orderId, status, message }` | Status order berubah |
+| `newOrder` | Vendor (room `vendor_{id}`) | `{ orderId, message }` | Ada pesanan baru masuk |
+
+---
+
+## ⏰ Scheduled Tasks
+
+| Task | Jadwal | Keterangan |
+|---|---|---|
+| Auto-cancel expired orders | Setiap 5 menit | Cancel order PENDING yang > 30 menit + restock otomatis |
 
 ---
 
@@ -184,18 +253,56 @@ PENDING ──→ CANCELLED  (by customer)
 ```
 src/
 ├── auth/          # Register, OTP, Login, JWT Strategy
-├── users/         # GET/PATCH /users/me
+├── user/          # GET/PATCH /users/me
 ├── otp/           # Generate, verify, rate limit
 ├── mailer/        # Resend wrapper + email template
-├── vendors/       # Public listing + vendor self profile
-├── menus/         # CRUD menu by vendor
-├── orders/        # Checkout, status flow, vendor dashboard
-├── payment/       # Strategy Pattern (Cash + Xendit placeholder)
-├── ratings/       # Rating per item, agregasi vendor
+├── vendor/        # Public listing + vendor self profile
+├── menu/          # CRUD menu by vendor
+├── order/         # Checkout, status flow, vendor dashboard
+├── payment/       # Strategy Pattern (Cash + Xendit QRIS)
+│   └── providers/ # CashProvider, XenditQrisProvider
+├── rating/        # Rating per item, agregasi vendor
 ├── upload/        # Cloudinary wrapper + image validation
 ├── admin/         # CRUD vendor & customer by admin
+├── events/        # WebSocket gateway (Socket.IO)
+├── webhook/       # Xendit payment callback handler
+├── task/          # Cron jobs (auto-cancel expired orders)
 ├── config/        # ConfigModule + Joi env validation
-└── common/        # Guards, decorators, filters, interceptors
+├── prisma/        # PrismaService + schema
+└── common/        # Guards, decorators, filters, interceptors, hashing
+    ├── guards/        # JwtAuthGuard, RolesGuard
+    ├── decorators/    # @Roles, @CurrentUser
+    ├── filters/       # PrismaExceptionFilter
+    ├── interceptors/  # TransformInterceptor
+    ├── hashing/       # Bcrypt hashing module
+    ├── helpers/       # Utility helpers
+    └── dto/           # PaginationDto, dll
+```
+
+---
+
+## 🗃️ Database Schema
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌──────────────┐
+│    User      │────→│  VendorProfile  │────→│     Menu     │
+│  (all roles) │     │  (canteen info) │     │ (food/drink) │
+└──────┬───────┘     └────────┬────────┘     └──────┬───────┘
+       │                      │                      │
+       │         ┌────────────┴────────────┐         │
+       └────────→│         Order           │←────────┘
+                 │ (code, status, payment) │
+                 └────────────┬────────────┘
+                              │
+                 ┌────────────┴────────────┐
+                 │       OrderItem         │
+                 │ (snapshot price & name) │
+                 └────────────┬────────────┘
+                              │
+                 ┌────────────┴────────────┐
+                 │        Rating           │
+                 │  (stars 1-5, review)    │
+                 └─────────────────────────┘
 ```
 
 ---
@@ -219,6 +326,11 @@ npm run start:prod
 railway run npm run prisma:seed
 ```
 
+**Xendit Webhook URL (set di Xendit Dashboard):**
+```
+https://your-domain.railway.app/api/webhooks/xendit
+```
+
 ---
 
 ## ⚠️ Known Risks
@@ -226,27 +338,38 @@ railway run npm run prisma:seed
 - **Resend dependency** — Kalau Resend down, OTP tidak terkirim. Customer bisa pakai endpoint `/auth/resend-otp` untuk coba lagi.
 - **No automated tests** — Unit test dan e2e test di-skip karena deadline. Perlu ditambah sebelum production.
 - **Single platform** — App dan DB di Railway, tidak ada staging environment.
-- **No push notification** — Status order update hanya via polling/refresh dari frontend.
+- **Xendit sandbox** — Masih pakai development key, perlu switch ke production key untuk go-live.
 
 ---
 
-## 🔮 Roadmap Phase 2
+## 🔮 Roadmap
 
-- [ ] Integrasi Xendit QRIS Dynamic (pembayaran online)
-- [ ] Webhook handler untuk konfirmasi pembayaran Xendit
-- [ ] Push notification ke customer saat status order berubah
-- [ ] Customer profile photo upload
 - [ ] Unit test & e2e test
+- [ ] Customer profile photo upload
+- [ ] Notifikasi WhatsApp (via Fonnte/WA Gateway)
+- [ ] Dashboard analytics untuk admin (total sales, top menu, dll)
+- [ ] Staging environment (Railway preview deployments)
+- [x] ~~Integrasi Xendit QRIS Dynamic~~
+- [x] ~~Webhook handler untuk konfirmasi pembayaran Xendit~~
+- [x] ~~Push notification real-time ke customer & vendor (WebSocket)~~
 
 ---
 
 ## 📄 Scripts
 
 ```bash
-npm run start:dev        # Development dengan hot reload
-npm run start:prod       # Production
-npm run build            # Compile TypeScript
-npm run prisma:seed      # Seed admin + kategori menu
-npm run prisma:migrate:dev   # Buat migration baru (development)
-npm run prisma:migrate:deploy # Jalankan migration (production)
+npm run start:dev              # Development dengan hot reload
+npm run start:prod             # Production
+npm run build                  # Compile TypeScript
+npm run lint                   # Lint + auto-fix
+npm run format                 # Prettier format
+npm run prisma:seed            # Seed admin + kategori menu
+npx prisma migrate dev         # Buat migration baru (development)
+npx prisma migrate deploy      # Jalankan migration (production)
 ```
+
+---
+
+## 📝 License
+
+UNLICENSED — Private project untuk SMK Telkom Malang.
