@@ -336,22 +336,29 @@ export class OrderService {
 
   // ─── Vendor: Accept ──────────────────────────────────────
   async acceptOrder(userId: number, orderId: number) {
-  const order = await this.getVendorOwnedOrder(userId, orderId);
-  this.assertStatus(order.status, OrderStatus.PENDING, 'accept');
+    const order = await this.getVendorOwnedOrder(userId, orderId);
+    this.assertStatus(order.status, OrderStatus.PENDING, 'accept');
 
-  if (order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID') {
-    throw new BadRequestException(
-      'Order ONLINE belum dibayar — tidak bisa diterima sebelum pembayaran terkonfirmasi',
+    if (order.paymentMethod === 'ONLINE' && order.paymentStatus !== 'PAID') {
+      throw new BadRequestException(
+        'Order ONLINE belum dibayar — tidak bisa diterima sebelum pembayaran terkonfirmasi',
+      );
+    }
+
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.ACCEPTED, acceptedAt: new Date() },
+    });
+
+    // Kirim notifikasi real-time ke customer
+    this.eventsGateway.notifyCustomerOrderUpdate(
+      order.customerId,
+      orderId,
+      OrderStatus.ACCEPTED,
     );
+
+    return { message: 'Order diterima' };
   }
-
-  await this.prisma.order.update({
-    where: { id: orderId },
-    data: { status: OrderStatus.ACCEPTED, acceptedAt: new Date() },
-  });
-
-  return { message: 'Order diterima' };
-}
 
   // ─── Vendor: Reject ──────────────────────────────────────
   async rejectOrder(userId: number, orderId: number, dto: RejectOrderDto) {
@@ -378,6 +385,14 @@ export class OrderService {
       });
     });
 
+    // Kirim notifikasi real-time ke customer disertai alasan
+    this.eventsGateway.notifyCustomerOrderUpdate(
+      order.customerId,
+      orderId,
+      OrderStatus.REJECTED,
+      dto.reason,
+    );
+
     return { message: 'Order ditolak' };
   }
 
@@ -390,6 +405,13 @@ export class OrderService {
       where: { id: orderId },
       data: { status: OrderStatus.READY, readyAt: new Date() },
     });
+
+    // Kirim notifikasi real-time ke customer
+    this.eventsGateway.notifyCustomerOrderUpdate(
+      order.customerId,
+      orderId,
+      OrderStatus.READY,
+    );
 
     return { message: 'Order siap diambil' };
   }
@@ -408,6 +430,13 @@ export class OrderService {
         ...(order.paymentMethod === 'CASH' && { paymentStatus: 'PAID' }),
       },
     });
+
+    // Kirim notifikasi real-time ke customer
+    this.eventsGateway.notifyCustomerOrderUpdate(
+      order.customerId,
+      orderId,
+      OrderStatus.COMPLETED,
+    );
 
     return { message: 'Order selesai' };
   }

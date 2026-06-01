@@ -64,10 +64,14 @@ export class EventsGateway
       }
 
       client.data.user = payload;
-      client.join(`user_${payload.sub}`);
+      const userRoom = `user_${payload.sub}`;
+      client.join(userRoom);
+      this.logger.log(`Client ${client.id} (User: ${payload.sub}) joined room: ${userRoom}`);
 
       if (payload.role === 'VENDOR') {
-        client.join(`vendor_${payload.sub}`);
+        const vendorRoom = `vendor_${payload.sub}`;
+        client.join(vendorRoom);
+        this.logger.log(`Client ${client.id} (Vendor: ${payload.sub}) joined room: ${vendorRoom}`);
       }
 
       this.logger.log(
@@ -89,7 +93,10 @@ export class EventsGateway
     status: string,
     message?: string,
   ) {
-    this.server.to(`user_${customerId}`).emit('orderUpdate', {
+    const userRoom = `user_${customerId}`;
+    this.logger.log(`Mengirim orderUpdate ke room "${userRoom}" untuk order #${orderId} (Status: ${status})`);
+    
+    this.server.to(userRoom).emit('orderUpdate', {
       orderId,
       status,
       message: message || `Status order #${orderId} berubah jadi ${status}`,
@@ -97,7 +104,10 @@ export class EventsGateway
   }
 
   notifyVendorNewOrder(vendorUserId: number, orderId: number, total: number) {
-    this.server.to(`vendor_${vendorUserId}`).emit('newOrder', {
+    const vendorRoom = `vendor_${vendorUserId}`;
+    this.logger.log(`Mengirim newOrder ke room "${vendorRoom}" untuk order #${orderId}`);
+    
+    this.server.to(vendorRoom).emit('newOrder', {
       orderId,
       message: `Ada pesanan baru masuk! (Total: Rp ${total})`,
     });
