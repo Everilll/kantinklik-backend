@@ -33,7 +33,7 @@ export class OrderService {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const txResult = await this.prisma.$transaction(async (tx) => {
           // 1. Load semua menu yang dipesan
           const menuIds = dto.items.map((i) => i.menuId);
           const menus = await tx.menu.findMany({
@@ -137,53 +137,93 @@ export class OrderService {
             });
           }
 
-          // 10. Initiate payment — pakai totalAmount (sudah include fee untuk ONLINE)
+          // 10. Get customer email untuk payment
           const customer = await tx.user.findUnique({
             where: { id: customerId },
             select: { email: true },
           });
 
-          const paymentResult = await this.paymentService.initiate(
+          return {
+            order,
+            subtotal,
+            platformFee,
+            totalAmount,
+            customerEmail: customer!.email,
+            vendorUserId: menus[0].vendor.userId,
+          };
+        });
+
+        // ── Phase 2: Initiate payment (di luar transaction) ────
+        // Kalau Xendit timeout/error, DB transaction tidak ikut rollback
+        let paymentResult;
+        try {
+          paymentResult = await this.paymentService.initiate(
             dto.paymentMethod,
             {
-              id: order.id,
-              orderCode: order.orderCode,
-              totalAmount,             // customer bayar ini
-              customerEmail: customer!.email,
+              id: txResult.order.id,
+              orderCode: txResult.order.orderCode,
+              totalAmount: txResult.totalAmount,
+              customerEmail: txResult.customerEmail,
             },
           );
 
-          // 11. Update payment status
-          await tx.order.update({
-            where: { id: order.id },
+          await this.prisma.order.update({
+            where: { id: txResult.order.id },
             data: {
               paymentStatus: paymentResult.paymentStatus,
               paymentReference: paymentResult.paymentReference,
             },
           });
+        } catch (paymentError) {
+          // Compensating transaction: cancel order + restock
+          this.logger.error(
+            `Payment gagal untuk order ${txResult.order.orderCode}, rollback...`,
+            paymentError,
+          );
+          await this.prisma.$transaction(async (tx) => {
+            for (const item of dto.items) {
+              await tx.menu.update({
+                where: { id: item.menuId },
+                data: { stock: { increment: item.quantity } },
+              });
+            }
+            await tx.order.update({
+              where: { id: txResult.order.id },
+              data: {
+                status: OrderStatus.CANCELLED,
+                cancelledAt: new Date(),
+                rejectionReason: 'Gagal menginisiasi pembayaran',
+              },
+            });
+          });
+          throw paymentError;
+        }
 
-          // Notifikasi vendor (Hanya kirim notif Real-time kalau pesanan Cash karena gausah tunggu bayar)
-          if (dto.paymentMethod === 'CASH') {
-            const vendorUserId = menus[0].vendor.userId; 
-            this.eventsGateway.notifyVendorNewOrder(vendorUserId, order.id, totalAmount);
-          }
+        // ── Phase 3: Notifikasi ────────────────────────────────
+        if (dto.paymentMethod === 'CASH') {
+          this.eventsGateway.notifyVendorNewOrder(
+            txResult.vendorUserId,
+            txResult.order.id,
+            txResult.totalAmount,
+          );
+        }
+        // ONLINE: vendor di-notify lewat webhook setelah pembayaran PAID
 
-          return {
-            message: 'Order berhasil dibuat',
-            data: {
-              orderId: order.id,
-              orderCode: order.orderCode,
-              subtotal,
-              platformFee,
-              totalAmount,
-              paymentMethod: dto.paymentMethod,
-              paymentStatus: paymentResult.paymentStatus,
-              ...(paymentResult.qrCodeUrl && {
-                qrCodeUrl: paymentResult.qrCodeUrl,
-              }),
-            },
-          }
-        });
+        return {
+          message: 'Order berhasil dibuat',
+          data: {
+            orderId: txResult.order.id,
+            orderCode: txResult.order.orderCode,
+            subtotal: txResult.subtotal,
+            platformFee: txResult.platformFee,
+            totalAmount: txResult.totalAmount,
+            paymentMethod: dto.paymentMethod,
+            paymentStatus: paymentResult.paymentStatus,
+            ...(paymentResult.qrCodeUrl && {
+              qrCodeUrl: paymentResult.qrCodeUrl,
+            }),
+          },
+        };
       } catch (error) {
         // Retry hanya untuk race condition order code (P2002 on orderCode)
         const isUniqueViolation =

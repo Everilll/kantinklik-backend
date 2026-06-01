@@ -12,6 +12,7 @@ import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderStatus } from '@prisma/client';
+import { EventsGateway } from '../events/events.gateway';
 
 @ApiTags('Webhooks')
 @SkipThrottle()
@@ -22,6 +23,7 @@ export class WebhookController {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   @Post('xendit')
@@ -58,7 +60,7 @@ export class WebhookController {
           { orderCode: referenceId },
         ],
       },
-      include: { orderItems: true },
+      include: { orderItems: true, vendor: { select: { userId: true } } },
     });
 
     if (!order) {
@@ -110,6 +112,13 @@ export class WebhookController {
       this.logger.log(
         `Order ${order.orderCode} — pembayaran BERHASIL (PAID)`,
       );
+
+      // Notify vendor: ada pesanan baru yang sudah dibayar
+      this.eventsGateway.notifyVendorNewOrder(
+        order.vendor.userId,
+        order.id,
+        Number(order.totalAmount),
+      );
     } else if (isFailed) {
       // 4b. Pembayaran gagal/expired — cancel + restock
       await this.prisma.$transaction(async (tx) => {
@@ -131,6 +140,14 @@ export class WebhookController {
       });
       this.logger.log(
         `Order ${order.orderCode} — pembayaran GAGAL/EXPIRED, di-cancel + restock`,
+      );
+
+      // Notify customer: order dibatalkan karena pembayaran gagal
+      this.eventsGateway.notifyCustomerOrderUpdate(
+        order.customerId,
+        order.id,
+        'CANCELLED',
+        'Pembayaran gagal atau kadaluarsa',
       );
     } else {
       this.logger.log(
