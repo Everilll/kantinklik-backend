@@ -31,8 +31,6 @@ export class XenditQrisProvider implements PaymentProvider {
     // Hitung fee — customer bayar totalAmount (sudah termasuk fee)
     // totalAmount = subtotal + platformFee sudah dihitung di OrderService
 
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 menit
-
     try {
       const response = await this.paymentRequest.createPaymentRequest({
         data: {
@@ -44,9 +42,6 @@ export class XenditQrisProvider implements PaymentProvider {
             reusability: 'ONE_TIME_USE',
             qrCode: {
               channelCode: 'QRIS',
-              channelProperties: {
-                expiresAt,
-              },
             },
           },
           description: `Pembayaran order KantinKlik ${order.orderCode}`,
